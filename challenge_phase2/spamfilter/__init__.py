@@ -1,6 +1,7 @@
 from flask import Flask
 import os
 from spamfilter.spamfilter_api import spam_api
+from .config import Config
 
 def create_app(testing_config=None):
 

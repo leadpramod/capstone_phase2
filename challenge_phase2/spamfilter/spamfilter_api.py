@@ -28,7 +28,16 @@ def allowed_file(filename, extensions=None):
     one of the extension provided in list 'ALLOWED_EXTENSIONS', defined in 'config.py',
     and return True or False respectively.
     '''
-    return True
+
+    if extensions is not None:
+        if type(extensions)==list:
+            file_ext = filename.partition(".")[2]
+            if file_ext in extensions:
+                return True
+            else:
+                return False
+        else:
+            return True
 
 @spam_api.route('/')
 def index():
@@ -88,9 +97,13 @@ def validate_input_dataset(input_dataset_path):
     
     Return True if all 6 validations pass.
     '''
+    print(input_dataset_path)
     df = pd.read_csv(input_dataset_path)
     
-    if not(len(df.columns != 2)):
+    print(df.head())
+    print(df.text.str)
+
+    if len(df.columns) != 2:
         return False, 'Only 2 columns allowed: Your input csv file has '+ str(len(df.columns)) + ' number of columns.'
 
     if "text" not in df.columns and "spam" not in df.columns:
@@ -103,7 +116,7 @@ def validate_input_dataset(input_dataset_path):
     import numpy as np
     spam = df.spam.unique()
     if not(np.all((spam==0) | (spam==1))):
-        return False, 'Only 1 and 0 values are allowed in spam column: Unwanted values ' + ",".join([str(i) for i in spam]) + ' appear in spam column'
+        return False, 'Only 1 and 0 values are allowed in spam column: Unwanted values ' + ",".join([str(i) for i in spam if i not in [0,1]]) + ' appear in spam column'
 
     from pandas.api.types import is_string_dtype
     if not(is_string_dtype(df.text)):
@@ -112,7 +125,7 @@ def validate_input_dataset(input_dataset_path):
     if not(all(df.text.str.startswith("Subject:"))):
         return False, 'Some of the input emails does not start with keyword "Subject:".'
     
-    return True
+    return True, None
 
 
 @spam_api.route('/upload/', methods=['GET', 'POST'])
@@ -147,10 +160,12 @@ def file_upload():
             flag, error = validate_input_dataset(f)
             if flag:
                 filename = secure_filename(f.filename)
+                f.stream.seek(0)
                 f.save(os.path.join('inputdata', filename))
-                fdb = File(f.filename, 'inputdata')
+                fdb = File(name=filename, filepath='inputdata')
                 db.session.add(fdb)
                 db.session.commit()
+                return redirect(url_for('SpamAPI.display_files'))
             else:
                 flash(error)
                 return render_template('upload.html')
@@ -194,7 +209,7 @@ def display_models(success_model=None):
     
     if 'success_model value is passed, corresponding model file name is highlighted.
     '''
-
+    return redirect(url_for('SpamAPI.display_files'))
 
 
 def isFloat(value):
@@ -253,10 +268,25 @@ def train_dataset():
     Finally render, 'display_models' template with value of template varaible 'success_model' 
     set to name of model generated, ie. 'sample.pk'
     '''
-
+    if request.method == 'GET':
+        print('Inside Request Method Get')
+        fileslist = []
+        for f_name in os.listdir('inputdata'):
+            if f_name.endswith('.csv'):
+                fileslist.append(f_name)
+        return render_template('train.html', train_files=fileslist)
     
-
-
+    elif request.method == 'POST':
+        print('Inside Request Method Post')
+        train_file = request.form['train_file']
+        train_size = request.form['train_size']
+        random_state = request.form['random_state']
+        shuffle = request.form['stratify']
+        print('Values captured from Form')
+        print(train_file, train_size, random_state, shuffle)
+        #print(train_size, random_state, shuffle)
+        #return render_template('train.html', tfile=train_file)
+        return redirect(url_for('SpamAPI.display_files'))
 
 @spam_api.route('/results/')
 def display_results():
@@ -305,4 +335,3 @@ def predict():
     11. Render the template 'display_results'
     
     '''
-    
